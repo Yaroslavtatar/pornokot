@@ -3,6 +3,28 @@ import { drawCatSprite, drawAccessory, generateBuildingCanvas, generateTreeCanva
 import { generateChunk, CHUNK_SIZE, TILE_SIZE } from './procedural';
 import { WorldText } from './world-text';
 
+export function getAmbientOverlay(timeOfDay: number): { overlayColor: string; nightAlpha: number } {
+  if (timeOfDay >= 7.5 && timeOfDay <= 17.0) {
+    return { overlayColor: 'rgba(0, 0, 0, 0)', nightAlpha: 0 };
+  } else if (timeOfDay > 17.0 && timeOfDay < 20.0) {
+    const progress = (timeOfDay - 17.0) / 3.0;
+    const r = Math.round(220 * (1 - progress) + 16 * progress);
+    const g = Math.round(110 * (1 - progress) + 22 * progress);
+    const b = Math.round(80 * (1 - progress) + 42 * progress);
+    const alpha = 0.15 + progress * 0.40;
+    return { overlayColor: `rgba(${r}, ${g}, ${b}, ${alpha.toFixed(2)})`, nightAlpha: progress };
+  } else if (timeOfDay >= 20.0 || timeOfDay < 5.0) {
+    return { overlayColor: 'rgba(16, 22, 42, 0.55)', nightAlpha: 1.0 };
+  } else {
+    const progress = (timeOfDay - 5.0) / 2.5;
+    const r = Math.round(16 * (1 - progress) + 255 * progress);
+    const g = Math.round(22 * (1 - progress) + 200 * progress);
+    const b = Math.round(42 * (1 - progress) + 140 * progress);
+    const alpha = 0.55 * (1 - progress);
+    return { overlayColor: `rgba(${r}, ${g}, ${b}, ${alpha.toFixed(2)})`, nightAlpha: 1 - progress };
+  }
+}
+
 export class Scene {
   canvas: HTMLCanvasElement;
   ctx: CanvasRenderingContext2D;
@@ -61,6 +83,14 @@ export class Scene {
       c.fillStyle = PALETTE.waterDeep;
       c.fillRect(roundX + waveOffset, roundY + 4, 6, 2);
       c.fillRect(roundX + (waveOffset + 8) % 12, roundY + 10, 5, 2);
+    } else if (type === 'bridge') {
+      c.fillStyle = PALETTE.waterTurquoise;
+      c.fillRect(roundX, roundY, TILE_SIZE, TILE_SIZE);
+      c.fillStyle = PALETTE.woodDark;
+      c.fillRect(roundX, roundY, TILE_SIZE, TILE_SIZE);
+      c.fillStyle = PALETTE.woodLight;
+      c.fillRect(roundX + 1, roundY + 2, TILE_SIZE - 2, 4);
+      c.fillRect(roundX + 1, roundY + 10, TILE_SIZE - 2, 4);
     } else if (type === 'flower') {
       c.fillStyle = PALETTE.grassBase;
       c.fillRect(roundX, roundY, TILE_SIZE, TILE_SIZE);
@@ -85,7 +115,7 @@ export class Scene {
     }
   }
 
-  drawProp(c: CanvasRenderingContext2D, prop: TileProp, time: number) {
+  drawProp(c: CanvasRenderingContext2D, prop: TileProp, time: number, isNight = false) {
     const x = prop.x;
     const y = prop.y;
 
@@ -93,7 +123,7 @@ export class Scene {
       const treeImg = generateTreeCanvas();
       c.drawImage(treeImg, x - 32, y - 80);
     } else if (prop.type === 'building' && prop.buildingType) {
-      const bldgImg = generateBuildingCanvas(prop.buildingType);
+      const bldgImg = generateBuildingCanvas(prop.buildingType, isNight);
       c.drawImage(bldgImg, x, y);
     } else if (prop.type === 'fountain') {
       const ftnImg = generateFountainCanvas();
@@ -113,8 +143,33 @@ export class Scene {
       // Lamp Post
       c.fillStyle = PALETTE.woodDark;
       c.fillRect(x + 6, y - 24, 4, 32);
-      c.fillStyle = PALETTE.lampGold;
+      c.fillStyle = isNight ? PALETTE.lampGold : '#a0a0a0';
       c.fillRect(x + 4, y - 30, 8, 8);
+    } else if (prop.type === 'fence') {
+      // Wooden Fence Post & Rails
+      c.fillStyle = PALETTE.woodDark;
+      c.fillRect(x, y + 2, 3, 12);
+      c.fillRect(x + prop.w - 3, y + 2, 3, 12);
+      c.fillStyle = PALETTE.woodLight;
+      c.fillRect(x, y + 4, prop.w, 3);
+      c.fillRect(x, y + 9, prop.w, 3);
+    } else if (prop.type === 'reeds') {
+      // Shoreline Reeds & Cattails
+      const sway = Math.sin(time / 300 + x) * 1.5;
+      c.fillStyle = PALETTE.grassDark;
+      c.fillRect(x + 2 + sway, y + 4, 2, 10);
+      c.fillRect(x + 7 - sway, y + 2, 2, 12);
+      c.fillRect(x + 12 + sway, y + 6, 2, 8);
+      // Brown cattail tops
+      c.fillStyle = PALETTE.woodDark;
+      c.fillRect(x + 1 + sway, y + 3, 4, 4);
+      c.fillRect(x + 6 - sway, y + 1, 4, 5);
+      c.fillRect(x + 11 + sway, y + 5, 4, 4);
+    } else if (prop.type === 'bridge') {
+      // Bridge side railings
+      c.fillStyle = PALETTE.woodDark;
+      c.fillRect(x, y, prop.w, 2);
+      c.fillRect(x, y + prop.h - 2, prop.w, 2);
     } else if (prop.type === 'picnic') {
       // Picnic Blanket
       c.fillStyle = PALETTE.roofRose;
@@ -190,6 +245,11 @@ export class Scene {
       }
     }
 
+    // Determine Day/Night ambient tint and properties
+    const timeOfDay = this.worldState?.timeOfDay ?? 12; // 0 to 24
+    const { overlayColor, nightAlpha } = getAmbientOverlay(timeOfDay);
+    const isNightProp = this.worldState?.isNight || nightAlpha > 0.3;
+
     // 2. Prepare Y-Sorted Drawables for Props & Players
     const drawables: { y: number; draw: () => void }[] = [];
 
@@ -202,7 +262,7 @@ export class Scene {
         const absProp = { ...prop, x: chunkX + prop.x, y: chunkY + prop.y };
         drawables.push({
           y: absProp.y + (absProp.h || 16),
-          draw: () => this.drawProp(c, absProp, time)
+          draw: () => this.drawProp(c, absProp, time, isNightProp)
         });
       }
     }
@@ -251,14 +311,12 @@ export class Scene {
     }
 
     // 3. Day / Night Ambient Cycle Overlay & Lamp Light Halos
-    const timeOfDay = this.worldState?.timeOfDay ?? 12; // 0 to 24
-    const isNight = timeOfDay < 6 || timeOfDay > 19;
-
-    if (isNight) {
-      // Dark Blue Night Overlay
-      c.fillStyle = 'rgba(20, 28, 50, 0.45)';
+    if (overlayColor !== 'rgba(0, 0, 0, 0)') {
+      c.fillStyle = overlayColor;
       c.fillRect(camX, camY, viewW, viewH);
+    }
 
+    if (nightAlpha > 0) {
       // Light Halos for Street Lamps
       for (const chunk of visibleChunks) {
         const chunkX = chunk.cx * chunkPixelSize;
@@ -269,14 +327,14 @@ export class Scene {
             const lx = chunkX + prop.x + 8;
             const ly = chunkY + prop.y - 26;
 
-            const grad = c.createRadialGradient(lx, ly, 2, lx, ly, 48);
-            grad.addColorStop(0, 'rgba(255, 230, 150, 0.7)');
-            grad.addColorStop(0.5, 'rgba(255, 200, 100, 0.2)');
-            grad.addColorStop(1, 'rgba(255, 200, 100, 0)');
+            const grad = c.createRadialGradient(lx, ly, 2, lx, ly, 52);
+            grad.addColorStop(0, `rgba(255, 235, 160, ${(0.85 * nightAlpha).toFixed(2)})`);
+            grad.addColorStop(0.4, `rgba(255, 190, 80, ${(0.35 * nightAlpha).toFixed(2)})`);
+            grad.addColorStop(1, 'rgba(255, 190, 80, 0)');
 
             c.fillStyle = grad;
             c.beginPath();
-            c.arc(lx, ly, 48, 0, Math.PI * 2);
+            c.arc(lx, ly, 52, 0, Math.PI * 2);
             c.fill();
           }
         }

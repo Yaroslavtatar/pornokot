@@ -3,13 +3,13 @@ import { ChunkData, TileType, TileProp } from './types';
 export const CHUNK_SIZE = 16; // 16x16 tiles per chunk
 export const TILE_SIZE = 16; // 16x16 px per tile (256x256 px per chunk)
 
-// Simple PRNG hash based on seed & coordinates
+// Hash PRNG based on seed & coordinates
 export function hashPRNG(seed: number, x: number, y: number): number {
   let n = Math.sin(x * 12.9898 + y * 78.233 + seed * 43758.5453) * 43758.5453;
   return n - Math.floor(n);
 }
 
-// Perlin-like 2D noise approximation
+// Multi-scale 2D noise for smooth biomes across chunk boundaries
 export function smoothNoise(seed: number, x: number, y: number, scale = 10): number {
   const sx = x / scale;
   const sy = y / scale;
@@ -32,7 +32,7 @@ export function smoothNoise(seed: number, x: number, y: number, scale = 10): num
   return nx0 * (1 - dy) + nx1 * dy;
 }
 
-// Generate a chunk deterministically for coordinate (cx, cy)
+// Generate a coherent chunk deterministically for coordinate (cx, cy)
 export function generateChunk(seed: number, cx: number, cy: number): ChunkData {
   const tiles: TileType[][] = Array.from({ length: CHUNK_SIZE }, () => Array(CHUNK_SIZE).fill('grass'));
   const noiseVariations: number[][] = Array.from({ length: CHUNK_SIZE }, () => Array(CHUNK_SIZE).fill(0));
@@ -41,48 +41,103 @@ export function generateChunk(seed: number, cx: number, cy: number): ChunkData {
   const startX = cx * CHUNK_SIZE;
   const startY = cy * CHUNK_SIZE;
 
-  // 1. Generate base tiles and grass brightness noise (±3%)
+  // 1. Generate Continuous Terrain & Biomes
   for (let r = 0; r < CHUNK_SIZE; r++) {
     for (let c = 0; c < CHUNK_SIZE; c++) {
       const worldX = startX + c;
       const worldY = startY + r;
+      const distFromCenter = Math.hypot(worldX, worldY);
 
-      // Small noise variation for grass
+      // Grass brightness noise
       const n = hashPRNG(seed, worldX, worldY);
-      noiseVariations[r][c] = (n - 0.5) * 0.06; // ±3% brightness variation
+      noiseVariations[r][c] = (n - 0.5) * 0.06;
 
-      const macroNoise = smoothNoise(seed, worldX, worldY, 20);
+      // Noise fields
+      const lakeNoise = smoothNoise(seed + 100, worldX, worldY, 24) * 0.7 + smoothNoise(seed + 101, worldX, worldY, 12) * 0.3;
+      const flowerNoise = smoothNoise(seed + 200, worldX, worldY, 8);
 
-      if (macroNoise > 0.72) {
+      // Road Network
+      const isMainRoad = (Math.abs(worldX) <= 1 || Math.abs(worldY) <= 1) && distFromCenter < 80;
+      const isRingRoad = Math.abs(distFromCenter - 22) < 1.2 || Math.abs(distFromCenter - 45) < 1.2;
+
+      // Central Town Plaza (radius < 8 tiles)
+      if (distFromCenter <= 7.5) {
+        tiles[r][c] = 'plaza';
+      } else if (isMainRoad || isRingRoad) {
+        tiles[r][c] = 'path';
+      } else if (distFromCenter > 12 && lakeNoise < 0.26) {
+        // Organic Lake / River
+        tiles[r][c] = 'water';
+      } else if (flowerNoise > 0.68) {
         tiles[r][c] = 'flower';
       }
     }
   }
 
-  // 2. Town Center Generation for Chunks around (0,0)
-  if (cx === 0 && cy === 0) {
-    // Central Plaza (6x6 tiles in center)
-    for (let r = 5; r <= 10; r++) {
-      for (let c = 5; c <= 10; c++) {
-        tiles[r][c] = 'plaza';
+  // 2. Bridges where Roads cross Water
+  for (let r = 0; r < CHUNK_SIZE; r++) {
+    for (let c = 0; c < CHUNK_SIZE; c++) {
+      if (tiles[r][c] === 'path') {
+        const worldX = startX + c;
+        const worldY = startY + r;
+
+        // Check if adjacent tiles are water (river/lake crossing)
+        const lakeNoise = smoothNoise(seed + 100, worldX, worldY, 24) * 0.7 + smoothNoise(seed + 101, worldX, worldY, 12) * 0.3;
+        if (lakeNoise < 0.32 && Math.hypot(worldX, worldY) > 12) {
+          tiles[r][c] = 'bridge';
+          // Spawn bridge prop
+          props.push({
+            id: `bridge-${worldX}-${worldY}`,
+            type: 'bridge',
+            x: c * TILE_SIZE,
+            y: r * TILE_SIZE,
+            w: 16,
+            h: 16
+          });
+        }
       }
     }
+  }
 
-    // Main Promenade Paths
-    for (let i = 0; i < CHUNK_SIZE; i++) {
-      tiles[7][i] = 'path';
-      tiles[8][i] = 'path';
-      tiles[i][7] = 'path';
-      tiles[i][8] = 'path';
+  // 3. Shoreline Reeds & Cattails Decorator
+  for (let r = 0; r < CHUNK_SIZE; r++) {
+    for (let c = 0; c < CHUNK_SIZE; c++) {
+      if (tiles[r][c] === 'grass') {
+        const worldX = startX + c;
+        const worldY = startY + r;
+
+        // Check if next to water
+        let isShoreline = false;
+        for (const [dr, dc] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+          const nr = r + dr;
+          const nc = c + dc;
+          if (nr >= 0 && nr < CHUNK_SIZE && nc >= 0 && nc < CHUNK_SIZE) {
+            if (tiles[nr][nc] === 'water') isShoreline = true;
+          }
+        }
+
+        if (isShoreline && hashPRNG(seed, worldX, worldY) > 0.45) {
+          props.push({
+            id: `reed-${worldX}-${worldY}`,
+            type: 'reeds',
+            x: c * TILE_SIZE,
+            y: r * TILE_SIZE,
+            w: 16,
+            h: 16
+          });
+        }
+      }
     }
+  }
 
-    // Props in Central Plaza (Chunk 0,0)
-    // Fountain in middle
+  // 4. Civic Buildings & Key Structures in Central Chunks
+  if (cx === 0 && cy === 0) {
+    // Central Plaza Fountain
     props.push({
       id: 'fountain-00',
       type: 'fountain',
-      x: 128,
-      y: 128,
+      x: 96,
+      y: 96,
       w: 64,
       h: 64,
       range: 60,
@@ -90,23 +145,19 @@ export function generateChunk(seed: number, cx: number, cy: number): ChunkData {
     });
 
     // Street Lamps around Plaza
-    props.push({ id: 'lamp-1', type: 'lamp', x: 80, y: 80, w: 16, h: 32, range: 40, state: true });
-    props.push({ id: 'lamp-2', type: 'lamp', x: 176, y: 80, w: 16, h: 32, range: 40, state: true });
-    props.push({ id: 'lamp-3', type: 'lamp', x: 80, y: 176, w: 16, h: 32, range: 40, state: true });
+    props.push({ id: 'lamp-1', type: 'lamp', x: 64, y: 64, w: 16, h: 32, range: 40, state: true });
+    props.push({ id: 'lamp-2', type: 'lamp', x: 176, y: 64, w: 16, h: 32, range: 40, state: true });
+    props.push({ id: 'lamp-3', type: 'lamp', x: 64, y: 176, w: 16, h: 32, range: 40, state: true });
     props.push({ id: 'lamp-4', type: 'lamp', x: 176, y: 176, w: 16, h: 32, range: 40, state: true });
 
-    // Benches
-    props.push({ id: 'bench-1', type: 'bench', x: 64, y: 128, w: 48, h: 24, range: 48 });
-    props.push({ id: 'bench-2', type: 'bench', x: 192, y: 128, w: 48, h: 24, range: 48 });
+    // Plaza Benches
+    props.push({ id: 'bench-1', type: 'bench', x: 48, y: 112, w: 48, h: 24, range: 48 });
+    props.push({ id: 'bench-2', type: 'bench', x: 160, y: 112, w: 48, h: 24, range: 48 });
 
     // Picnic Blanket
-    props.push({ id: 'picnic-1', type: 'picnic', x: 40, y: 192, w: 48, h: 32 });
+    props.push({ id: 'picnic-1', type: 'picnic', x: 32, y: 192, w: 48, h: 32 });
   } else if (cx === 0 && cy === -1) {
-    // North Center Chunk: Town Hall & Outfits Shop
-    for (let i = 0; i < CHUNK_SIZE; i++) {
-      tiles[i][7] = 'path';
-      tiles[i][8] = 'path';
-    }
+    // Town Hall & Outfits Store
     props.push({
       id: 'b-townhall',
       type: 'building',
@@ -125,12 +176,11 @@ export function generateChunk(seed: number, cx: number, cy: number): ChunkData {
       w: 128,
       h: 112
     });
+    // Perimeter fences
+    props.push({ id: 'fence-th-1', type: 'fence', x: 16, y: 160, w: 32, h: 8 });
+    props.push({ id: 'fence-th-2', type: 'fence', x: 208, y: 160, w: 32, h: 8 });
   } else if (cx === 1 && cy === 0) {
-    // East Center Chunk: Cafe & Flower Shop
-    for (let i = 0; i < CHUNK_SIZE; i++) {
-      tiles[7][i] = 'path';
-      tiles[8][i] = 'path';
-    }
+    // Cafe & Flower Shop
     props.push({
       id: 'b-cafe',
       type: 'building',
@@ -149,85 +199,78 @@ export function generateChunk(seed: number, cx: number, cy: number): ChunkData {
       w: 128,
       h: 112
     });
+    props.push({ id: 'bench-cafe', type: 'bench', x: 48, y: 136, w: 48, h: 24, range: 48 });
   } else if (cx === -1 && cy === 0) {
-    // West Center Chunk: Lake & Bakery
-    for (let i = 0; i < CHUNK_SIZE; i++) {
-      tiles[7][i] = 'path';
-      tiles[8][i] = 'path';
-    }
-    // Pond area
-    for (let r = 1; r < 14; r++) {
-      for (let c = 1; c < 12; c++) {
-        tiles[r][c] = 'water';
-      }
-    }
+    // Bakery & Lakeshore
     props.push({
       id: 'b-bakery',
       type: 'building',
       buildingType: 'bakery',
-      x: 128,
+      x: 112,
       y: 16,
       w: 128,
       h: 112
     });
+    props.push({ id: 'lamp-bakery', type: 'lamp', x: 96, y: 128, w: 16, h: 32, range: 40, state: true });
   } else if (cx === 0 && cy === 1) {
-    // South Center Chunk: Library & Park Pavilion
-    for (let i = 0; i < CHUNK_SIZE; i++) {
-      tiles[i][7] = 'path';
-      tiles[i][8] = 'path';
-    }
+    // Library & Park Pavilion
     props.push({
       id: 'b-library',
       type: 'building',
       buildingType: 'library',
       x: 16,
-      y: 128,
+      y: 112,
       w: 128,
       h: 112
     });
+    props.push({ id: 'fence-lib', type: 'fence', x: 144, y: 128, w: 48, h: 8 });
   } else {
-    // 3. Outer Procedural Chunks (Neighborhoods, Forests, Lakes)
-    const chunkHash = hashPRNG(seed, cx, cy);
+    // 5. Outer Chunks: Suburbs, Forests & Wilderness
+    const chunkDist = Math.hypot(cx, cy);
 
-    if (chunkHash < 0.25) {
-      // Residential Neighborhood Chunk
+    if (chunkDist <= 3.5) {
+      // Suburbs: Cozy residential cottages with fences & gardens
+      const houseX = (hashPRNG(seed, cx, cy) > 0.5 ? 2 : 8) * TILE_SIZE;
+      const houseY = 2 * TILE_SIZE;
       props.push({
         id: `house-${cx}-${cy}`,
         type: 'building',
         buildingType: 'house',
-        x: 64,
-        y: 48,
+        x: houseX,
+        y: houseY,
         w: 128,
         h: 112
       });
-      // Path leading to house
-      for (let r = 8; r < 16; r++) {
-        tiles[r][8] = 'path';
-      }
-      props.push({ id: `lamp-${cx}-${cy}`, type: 'lamp', x: 112, y: 144, w: 16, h: 32, range: 40, state: true });
-    } else if (chunkHash < 0.65) {
-      // Park / Forest Chunk with trees
-      const treeCount = Math.floor(chunkHash * 10) + 3;
-      for (let i = 0; i < treeCount; i++) {
-        const tx = Math.floor(hashPRNG(seed + i, cx * 3, cy * 5) * 12 + 2) * TILE_SIZE;
-        const ty = Math.floor(hashPRNG(seed + i, cx * 7, cy * 11) * 12 + 2) * TILE_SIZE;
-        props.push({ id: `tree-${cx}-${cy}-${i}`, type: 'tree', x: tx, y: ty, w: 64, h: 80 });
-      }
-    } else if (chunkHash < 0.85) {
-      // Flower Meadow
-      for (let r = 2; r < 14; r++) {
-        for (let c = 2; c < 14; c++) {
-          if (hashPRNG(seed, startX + c, startY + r) > 0.4) {
-            tiles[r][c] = 'flower';
+      // Garden Fence
+      props.push({ id: `fence-h-${cx}-${cy}-1`, type: 'fence', x: houseX - 16, y: houseY + 112, w: 48, h: 8 });
+      props.push({ id: `fence-h-${cx}-${cy}-2`, type: 'fence', x: houseX + 96, y: houseY + 112, w: 48, h: 8 });
+      props.push({ id: `lamp-h-${cx}-${cy}`, type: 'lamp', x: houseX + 64, y: houseY + 128, w: 16, h: 32, range: 40, state: true });
+    } else {
+      // Wilderness: Forests, Meadows, Lakes
+      const forestNoise = smoothNoise(seed + 300, cx, cy, 3);
+
+      if (forestNoise > 0.42) {
+        // Forest Biome with tree clusters
+        const treeCount = Math.floor(forestNoise * 8) + 2;
+        for (let i = 0; i < treeCount; i++) {
+          const tx = Math.floor(hashPRNG(seed + i, cx * 3, cy * 5) * 12 + 2) * TILE_SIZE;
+          const ty = Math.floor(hashPRNG(seed + i, cx * 7, cy * 11) * 12 + 2) * TILE_SIZE;
+
+          // Don't spawn tree on water or path
+          const tileCol = Math.floor(tx / TILE_SIZE);
+          const tileRow = Math.floor(ty / TILE_SIZE);
+          if (tileRow >= 0 && tileRow < CHUNK_SIZE && tileCol >= 0 && tileCol < CHUNK_SIZE) {
+            if (tiles[tileRow][tileCol] === 'grass' || tiles[tileRow][tileCol] === 'flower') {
+              props.push({ id: `tree-${cx}-${cy}-${i}`, type: 'tree', x: tx, y: ty, w: 64, h: 80 });
+            }
           }
         }
-      }
-      props.push({ id: `bench-${cx}-${cy}`, type: 'bench', x: 104, y: 112, w: 48, h: 24, range: 48 });
-    } else {
-      // Small Pond / Lake Chunk
-      for (let r = 4; r < 12; r++) {
-        for (let c = 4; c < 12; c++) {
-          tiles[r][c] = 'water';
+      } else {
+        // Open Meadow
+        if (hashPRNG(seed, cx * 13, cy * 17) > 0.6) {
+          const bx = Math.floor(hashPRNG(seed, cx * 5, cy * 9) * 10 + 3) * TILE_SIZE;
+          const by = Math.floor(hashPRNG(seed, cx * 11, cy * 3) * 10 + 3) * TILE_SIZE;
+          props.push({ id: `bench-${cx}-${cy}`, type: 'bench', x: bx, y: by, w: 48, h: 24, range: 48 });
         }
       }
     }

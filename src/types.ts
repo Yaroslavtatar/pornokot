@@ -3,6 +3,12 @@ export type FurColor = 'gray' | 'lavender' | 'cream' | 'cocoa';
 export type AccessoryType = 'none' | 'mushroom-hat' | 'hat' | 'pink-body-bow' | 'blue-tail-bow';
 export type Pose = 'idle' | 'walk' | 'sit' | 'sleep';
 
+export interface InputVector {
+  dx: number;
+  dy: number;
+  at?: number;
+}
+
 export interface Appearance {
   fur: FurColor;
   accessory: AccessoryType;
@@ -35,7 +41,7 @@ export type TileType = 'grass' | 'path' | 'plaza' | 'water' | 'bridge' | 'flower
 
 export interface TileProp {
   id: string;
-  type: 'bench' | 'lamp' | 'fountain' | 'tree' | 'building' | 'picnic' | 'flowerbed';
+  type: 'bench' | 'lamp' | 'fountain' | 'tree' | 'building' | 'picnic' | 'flowerbed' | 'fence' | 'reeds' | 'bridge';
   buildingType?: 'townhall' | 'outfits' | 'cafe' | 'bakery' | 'library' | 'flowershop' | 'house';
   x: number;
   y: number;

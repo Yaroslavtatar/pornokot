@@ -7,6 +7,8 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { createServer as createViteServer } from 'vite';
 import fs from 'fs';
 import { Player, WorldState, Appearance, WSMessage, Direction } from './src/types.js';
+import { generateChunk } from './src/procedural.js';
+import { resolveMovement } from './src/collision.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -24,6 +26,17 @@ const WORLD_STATE: WorldState = {
   timeOfDay: 12.0, // 0 to 24
   isNight: false
 };
+
+const serverChunksMap = new Map<string, any>();
+function getServerChunk(cx: number, cy: number) {
+  const key = `${cx}:${cy}`;
+  let chunk = serverChunksMap.get(key);
+  if (!chunk) {
+    chunk = generateChunk(WORLD_STATE.seed, cx, cy);
+    serverChunksMap.set(key, chunk);
+  }
+  return chunk;
+}
 
 // Advance Day/Night Cycle (1 in-game day = 6 real minutes)
 setInterval(() => {
@@ -260,8 +273,9 @@ setInterval(() => {
   for (const [id, player] of playersMap.entries()) {
     const input = playerInputs.get(id) || { dx: 0, dy: 0 };
     if (input.dx !== 0 || input.dy !== 0) {
-      player.x += input.dx * SPEED;
-      player.y += input.dy * SPEED;
+      const nextPos = resolveMovement(player.x, player.y, input.dx, input.dy, SPEED, getServerChunk);
+      player.x = nextPos.x;
+      player.y = nextPos.y;
       player.moving = true;
       player.pose = 'walk';
 

@@ -1,4 +1,4 @@
-import { Direction, FurColor, AccessoryType, Pose, Appearance } from './types';
+import { Direction, FurColor, AccessoryType, Pose } from './types';
 
 // Palette definitions for pixel art
 export const PALETTE = {
@@ -36,6 +36,7 @@ export const PALETTE = {
   woodDark: '#6b5443',
   woodLight: '#a3846c',
   windowGlass: '#95c2be',
+  windowGlassGlow: '#ffe875',
   windowFrame: '#e8a299',
   lampGold: '#ffe094',
   flowerPink: '#e8a2b5',
@@ -43,7 +44,6 @@ export const PALETTE = {
   flowerWhite: '#fff8eb'
 };
 
-const cachedCatSheets = new Map<string, HTMLCanvasElement>();
 const cachedPropCanvases = new Map<string, HTMLCanvasElement>();
 
 function createCanvas(w: number, h: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
@@ -67,7 +67,6 @@ function fillEllipse(ctx: CanvasRenderingContext2D, cx: number, cy: number, rx: 
   ctx.fill();
 }
 
-// Map fur type to color string
 export function getFurColorHex(fur: FurColor): string {
   switch (fur) {
     case 'lavender': return PALETTE.furLavender;
@@ -77,7 +76,7 @@ export function getFurColorHex(fur: FurColor): string {
   }
 }
 
-// Generate pixel-art cat sprite for a given direction, frame, fur color, and posture
+// Draw cat sprite
 export function drawCatSprite(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -95,17 +94,13 @@ export function drawCatSprite(
   const isSitting = pose === 'sit';
   const isSleeping = pose === 'sleep';
 
-  // Ground shadow under cat
   fillEllipse(ctx, 16, 28, 12, 4, 'rgba(60, 80, 50, 0.35)');
 
   if (isSleeping) {
-    // Sleeping curled up cat
     fillEllipse(ctx, 16, 22, 12, 8, PALETTE.outline);
     fillEllipse(ctx, 16, 22, 11, 7, furColor);
-    // Ears
     fillRect(ctx, 8, 14, 3, 3, PALETTE.outline);
     fillRect(ctx, 9, 15, 2, 2, furColor);
-    // Closed eyes 'z z'
     fillRect(ctx, 12, 20, 3, 1, PALETTE.eye);
     fillRect(ctx, 18, 20, 3, 1, PALETTE.eye);
     ctx.restore();
@@ -115,16 +110,13 @@ export function drawCatSprite(
   const yNudge = isSitting ? 2 : (isWalking && (frame % 2 === 1) ? -1 : 0);
   const legShift = isWalking ? (frame % 2 === 0 ? -1 : 1) : 0;
 
-  // Tail swishing animation in idle / walk
   const tailAngle = Math.sin(frame * 0.8) * 3;
   const tailX = dir === 'right' ? 4 : dir === 'left' ? 28 : 22;
   const tailY = 20 + yNudge;
 
-  // Draw Tail
   fillRect(ctx, tailX + tailAngle, tailY - 4, 3, 6, PALETTE.outline);
   fillRect(ctx, tailX + tailAngle + 1, tailY - 3, 1, 4, furColor);
 
-  // Legs
   if (!isSitting) {
     fillRect(ctx, 9 + legShift, 25, 4, 4, PALETTE.outline);
     fillRect(ctx, 10 + legShift, 25, 2, 3, furColor);
@@ -133,58 +125,46 @@ export function drawCatSprite(
     fillRect(ctx, 20 - legShift, 25, 2, 3, furColor);
   }
 
-  // Chubby Main Body Oval
   fillEllipse(ctx, 16, 18 + yNudge, 12, 9, PALETTE.outline);
   fillEllipse(ctx, 16, 18 + yNudge, 11, 8, furColor);
 
-  // Head Features based on Direction
   const hy = 13 + yNudge;
 
   if (dir === 'down' || dir === 'left' || dir === 'right') {
-    // Ears
     fillRect(ctx, 7, hy - 5, 4, 5, PALETTE.outline);
     fillRect(ctx, 8, hy - 4, 2, 4, furColor);
 
     fillRect(ctx, 21, hy - 5, 4, 5, PALETTE.outline);
     fillRect(ctx, 22, hy - 4, 2, 4, furColor);
   } else {
-    // Back view ears
     fillRect(ctx, 8, hy - 5, 4, 5, PALETTE.outline);
     fillRect(ctx, 9, hy - 4, 2, 4, furColor);
 
     fillRect(ctx, 20, hy - 5, 4, 5, PALETTE.outline);
     fillRect(ctx, 21, hy - 4, 2, 4, furColor);
-    // Back stripes
     fillRect(ctx, 12, hy + 2, 2, 4, PALETTE.outline);
     fillRect(ctx, 18, hy + 2, 2, 4, PALETTE.outline);
   }
 
   if (dir === 'down') {
-    // Face Down
-    // Eyes
     fillRect(ctx, 11, hy, 2, 2, PALETTE.eye);
     fillRect(ctx, 19, hy, 2, 2, PALETTE.eye);
-    // Cheeks
     fillRect(ctx, 9, hy + 2, 2, 2, PALETTE.pinkCheek);
     fillRect(ctx, 21, hy + 2, 2, 2, PALETTE.pinkCheek);
-    // Mouth 'w'
     fillRect(ctx, 14, hy + 3, 1, 1, PALETTE.outline);
     fillRect(ctx, 15, hy + 4, 2, 1, PALETTE.outline);
     fillRect(ctx, 17, hy + 3, 1, 1, PALETTE.outline);
-    // Whiskers
     fillRect(ctx, 5, hy + 1, 3, 1, PALETTE.outline);
     fillRect(ctx, 5, hy + 3, 3, 1, PALETTE.outline);
     fillRect(ctx, 24, hy + 1, 3, 1, PALETTE.outline);
     fillRect(ctx, 24, hy + 3, 3, 1, PALETTE.outline);
   } else if (dir === 'left') {
-    // Face Left
     fillRect(ctx, 10, hy, 2, 2, PALETTE.eye);
     fillRect(ctx, 8, hy + 2, 2, 2, PALETTE.pinkCheek);
     fillRect(ctx, 12, hy + 3, 2, 1, PALETTE.outline);
     fillRect(ctx, 4, hy + 1, 3, 1, PALETTE.outline);
     fillRect(ctx, 4, hy + 3, 3, 1, PALETTE.outline);
   } else if (dir === 'right') {
-    // Face Right
     fillRect(ctx, 20, hy, 2, 2, PALETTE.eye);
     fillRect(ctx, 22, hy + 2, 2, 2, PALETTE.pinkCheek);
     fillRect(ctx, 18, hy + 3, 2, 1, PALETTE.outline);
@@ -195,7 +175,6 @@ export function drawCatSprite(
   ctx.restore();
 }
 
-// Draw accessory over cat
 export function drawAccessory(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -212,25 +191,20 @@ export function drawAccessory(
   const yNudge = pose === 'sit' ? 2 : 0;
 
   if (accessory === 'mushroom-hat') {
-    // Red mushroom hat with white dots
     fillEllipse(ctx, 16, 7 + yNudge, 9, 5, '#b83b3b');
     fillRect(ctx, 10, 10 + yNudge, 12, 2, '#ebdcd5');
-    // White dots
     fillRect(ctx, 12, 5 + yNudge, 2, 2, PALETTE.white);
     fillRect(ctx, 18, 6 + yNudge, 2, 2, PALETTE.white);
     fillRect(ctx, 15, 8 + yNudge, 2, 2, PALETTE.white);
   } else if (accessory === 'hat') {
-    // Gentleman Top Hat
     fillRect(ctx, 10, 9 + yNudge, 12, 2, PALETTE.outline);
     fillRect(ctx, 12, 2 + yNudge, 8, 8, PALETTE.outline);
-    fillRect(ctx, 12, 8 + yNudge, 8, 1, '#d84e4e'); // Red band
+    fillRect(ctx, 12, 8 + yNudge, 8, 1, '#d84e4e');
   } else if (accessory === 'pink-body-bow') {
-    // Cute Pink Body Bow
     fillEllipse(ctx, 13, 19 + yNudge, 3, 2, PALETTE.pinkCheek);
     fillEllipse(ctx, 19, 19 + yNudge, 3, 2, PALETTE.pinkCheek);
     fillRect(ctx, 15, 18 + yNudge, 2, 2, '#d65270');
   } else if (accessory === 'blue-tail-bow') {
-    // Blue Tail Bow
     const tailX = dir === 'right' ? 6 : 24;
     fillEllipse(ctx, tailX - 2, 19 + yNudge, 3, 2, '#50a0d8');
     fillEllipse(ctx, tailX + 2, 19 + yNudge, 3, 2, '#50a0d8');
@@ -240,9 +214,10 @@ export function drawAccessory(
   ctx.restore();
 }
 
-// Building Renderer - Generates beautiful pixel-art buildings
-export function generateBuildingCanvas(type: string): HTMLCanvasElement {
-  const cached = cachedPropCanvases.get(`building-${type}`);
+// Building Renderer - Generates pixel-art buildings with Day & Night window glow
+export function generateBuildingCanvas(type: string, isNight = false): HTMLCanvasElement {
+  const cacheKey = `building-${type}-${isNight ? 'night' : 'day'}`;
+  const cached = cachedPropCanvases.get(cacheKey);
   if (cached) return cached;
 
   let width = 128;
@@ -287,14 +262,27 @@ export function generateBuildingCanvas(type: string): HTMLCanvasElement {
   const doorY = height - 48;
   fillRect(ctx, doorX, doorY, 24, 36, PALETTE.woodDark);
   fillRect(ctx, doorX + 2, doorY + 2, 20, 32, PALETTE.woodLight);
-  fillRect(ctx, doorX + 18, doorY + 18, 3, 3, PALETTE.lampGold); // Handle
+  fillRect(ctx, doorX + 18, doorY + 18, 3, 3, PALETTE.lampGold);
 
-  // Windows
+  // Door transom window glow at night
+  if (isNight) {
+    fillRect(ctx, doorX + 4, doorY + 4, 16, 6, PALETTE.windowGlassGlow);
+  }
+
+  // Windows with glowing warm interiors at night
   const winY = 48;
+  const glassColor = isNight ? PALETTE.windowGlassGlow : PALETTE.windowGlass;
+
   for (const winX of [doorX - 32, doorX + 36]) {
     if (winX > 12 && winX < width - 36) {
       fillRect(ctx, winX - 2, winY - 2, 28, 28, PALETTE.windowFrame);
-      fillRect(ctx, winX, winY, 24, 24, PALETTE.windowGlass);
+      fillRect(ctx, winX, winY, 24, 24, glassColor);
+
+      // Night window bloom glow
+      if (isNight) {
+        fillEllipse(ctx, winX + 12, winY + 12, 16, 16, 'rgba(255, 232, 117, 0.35)');
+      }
+
       fillRect(ctx, winX + 11, winY, 2, 24, PALETTE.windowFrame);
       fillRect(ctx, winX, winY + 11, 24, 2, PALETTE.windowFrame);
 
@@ -310,9 +298,8 @@ export function generateBuildingCanvas(type: string): HTMLCanvasElement {
   const signX = Math.round(width / 2 - 36);
   const signY = 24;
   fillRect(ctx, signX, signY, 72, 16, PALETTE.woodDark);
-  fillRect(ctx, signX + 2, signY + 2, 68, 12, '#fbf5e6');
+  fillRect(ctx, signX + 2, signY + 2, 68, 12, isNight ? '#fff5cc' : '#fbf5e6');
 
-  // Text / Emblem on sign
   ctx.font = 'bold 9px monospace';
   ctx.textAlign = 'center';
   ctx.fillStyle = PALETTE.outline;
@@ -325,27 +312,23 @@ export function generateBuildingCanvas(type: string): HTMLCanvasElement {
     type === 'flowershop' ? 'ЦВЕТЫ' : 'ДОМИК';
   ctx.fillText(label, width / 2, signY + 11);
 
-  cachedPropCanvases.set(`building-${type}`, canvas);
+  cachedPropCanvases.set(cacheKey, canvas);
   return canvas;
 }
 
-// Tree Generator
 export function generateTreeCanvas(): HTMLCanvasElement {
   const cached = cachedPropCanvases.get('tree');
   if (cached) return cached;
 
   const [canvas, ctx] = createCanvas(64, 80);
 
-  // Trunk
   fillRect(ctx, 28, 48, 8, 28, PALETTE.woodDark);
   fillRect(ctx, 32, 48, 4, 28, PALETTE.woodLight);
 
-  // Layered Canopy Ovals
   fillEllipse(ctx, 32, 32, 24, 20, PALETTE.grassDark);
   fillEllipse(ctx, 28, 28, 20, 16, PALETTE.grassBase);
   fillEllipse(ctx, 24, 22, 14, 12, PALETTE.grassLight);
 
-  // Highlights / Leaf details
   for (let i = 0; i < 8; i++) {
     fillEllipse(ctx, 16 + i * 4, 16 + (i % 3) * 6, 4, 3, PALETTE.grassLight);
   }
@@ -354,23 +337,19 @@ export function generateTreeCanvas(): HTMLCanvasElement {
   return canvas;
 }
 
-// Fountain Generator
 export function generateFountainCanvas(): HTMLCanvasElement {
   const cached = cachedPropCanvases.get('fountain');
   if (cached) return cached;
 
   const [canvas, ctx] = createCanvas(64, 64);
 
-  // Stone Basin
   fillEllipse(ctx, 32, 36, 28, 16, PALETTE.plazaBorder);
   fillEllipse(ctx, 32, 34, 26, 14, PALETTE.plazaStone);
   fillEllipse(ctx, 32, 32, 22, 10, PALETTE.waterTurquoise);
 
-  // Central Pillar
   fillRect(ctx, 29, 14, 6, 20, PALETTE.plazaBorder);
   fillRect(ctx, 30, 14, 4, 20, PALETTE.plazaStone);
 
-  // Upper Basin
   fillEllipse(ctx, 32, 16, 12, 5, PALETTE.plazaBorder);
   fillEllipse(ctx, 32, 15, 10, 4, PALETTE.waterTurquoise);
 
