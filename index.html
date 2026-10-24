@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Pusheen Cat Courtyard - Кошачья Поляна</title>
+    <link rel="stylesheet" href="/src/index.css" />
+    <meta name="description" content="Уютная многопользовательская онлайн-игра с милыми котиками на поляне" />
+    <meta property="og:title" content="Pusheen Cat Courtyard - Кошачья Поляна" />
+    <meta property="og:description" content="Уютная многопользовательская онлайн-игра с милыми котиками на поляне" />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+  </head>
+  <body>
+    <div id="game" hidden>
+      <canvas id="world"></canvas>
+      <div id="world-text"></div>
+
+      <div class="top">
+        <div class="brand">
+          <div class="brand-icon">✿</div>
+          <div>
+            <h1>Кошачья Поляна</h1>
+            <small>Pusheen Courtyard</small>
+          </div>
+        </div>
+
+        <div class="presence">
+          <span id="signal"></span>
+          <span id="online">Загрузка…</span>
+        </div>
+
+        <button type="button" id="customize"><span>Образ</span> ✿</button>
+      </div>
+
+      <div class="guest">Котик</div>
+
+      <div class="place">
+        <span>Центральная Поляна</span>
+        <small>Уютное местечко</small>
+      </div>
+
+      <div id="notice"></div>
+
+      <div id="nearby">
+        <button type="button" id="interact" disabled></button>
+      </div>
+
+      <div class="bottom">
+        <div id="chat-panel">
+          <button type="button" id="chat-toggle" aria-expanded="true">Чат <span>▲</span></button>
+          <ul id="history"></ul>
+          <form id="chat-form">
+            <input id="chat" type="text" placeholder="Напиши что-нибудь…" maxlength="120" autocomplete="off" />
+            <button type="submit">►</button>
+          </form>
+        </div>
+
+        <div class="actions">
+          <button type="button" data-emote="heart" title="Любовь">
+            <span class="action-icon">♥</span>
+            <small>Любовь</small>
+          </button>
+          <button type="button" data-emote="wave" title="Нота">
+            <span class="action-icon">♪</span>
+            <small>Нота</small>
+          </button>
+          <button type="button" data-emote="happy" title="Блеск">
+            <span class="action-icon">✦</span>
+            <small>Блеск</small>
+          </button>
+          <button type="button" id="sleep" title="Спать">
+            <span class="action-icon">💤</span>
+            <small>Сон</small>
+          </button>
+        </div>
+      </div>
+
+      <div class="keys">
+        <b>W A S D / Стрелочки</b> — ходить · <b>E</b> — действие · <b>Enter</b> — чат
+      </div>
+
+      <div id="joystick">
+        <div id="stick">✿</div>
+      </div>
+
+      <dialog id="wardrobe">
+        <button type="button" class="close" id="close-drawer">×</button>
+        <div class="eyebrow">ГАРДЕРОБ</div>
+        <h2>Образ Котика</h2>
+
+        <canvas id="preview" width="192" height="128"></canvas>
+
+        <form id="profile-form">
+          <label class="name-label">
+            Имя котика:
+            <input id="name" type="text" minlength="2" maxlength="20" required />
+          </label>
+
+          <fieldset>
+            <legend>Цвет шерсти:</legend>
+            <div class="choices" id="furs"></div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Аксессуар:</legend>
+            <div class="choices" id="accessories"></div>
+          </fieldset>
+
+          <button type="submit" class="primary">Сохранить образ</button>
+          <div id="profile-status"></div>
+        </form>
+      </dialog>
+    </div>
+
+    <div id="entry">
+      <div class="entry-shell">
+        <div class="entry-heading">
+          <div class="eyebrow">ОНЛАЙН-ПОЛЯНА С КОТИКАМИ</div>
+          <h1>Кошачья Поляна</h1>
+          <p>Свободный уютный уголок для прогулок, общения и отдыха ✿</p>
+        </div>
+
+        <div class="entry-layout">
+          <div class="entry-avatar">
+            <div class="entry-spark">✦</div>
+            <div class="entry-flower">✿</div>
+            <canvas id="entry-preview" width="288" height="192"></canvas>
+            <p>Твой котик готов!</p>
+            <small>Выбери имя и стиль ниже</small>
+          </div>
+
+          <form id="entry-form" aria-busy="true">
+            <div class="eyebrow">СОЗДАНИЕ ПЕРСОНАЖА</div>
+            <h2>Как тебя зовут?</h2>
+
+            <label class="name-label">
+              Кличка котика:
+              <input
+                id="entry-name"
+                type="text"
+                minlength="2"
+                maxlength="20"
+                placeholder="Например: Мурчик"
+                required
+                disabled
+              />
+            </label>
+
+            <fieldset>
+              <legend>Шерсть:</legend>
+              <div class="choices" id="entry-furs"></div>
+            </fieldset>
+
+            <fieldset>
+              <legend>Аксессуар:</legend>
+              <div class="choices" id="entry-accessories"></div>
+            </fieldset>
+
+            <button type="submit" id="play" class="primary" disabled>Играть ✿</button>
+            <div id="entry-status">Загрузка профиля…</div>
+            <p class="entry-hint">Нажми «Играть», чтобы зайти на онлайн-поляну к другим котикам.</p>
+          </form>
+        </div>
+
+        <div class="entry-footer">
+          <span>Кошачья Поляна ✿ 2026</span>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

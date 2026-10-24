@@ -1,0 +1,6 @@
+{
+  "name": "Pusheen Cat Courtyard - Кошачья Поляна",
+  "description": "Уютная многопользовательская онлайн-игра с милыми котиками на поляне",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
